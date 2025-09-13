@@ -1,0 +1,15 @@
+{
+  "name": "FaDe SCOUT v.2.0",
+  "short_name": "FaDe SCOUT",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1b5e20",
+  "theme_color": "#2e7d32",
+  "icons": [
+    {
+      "src": "Binoculars-PNG-Picture copia.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
