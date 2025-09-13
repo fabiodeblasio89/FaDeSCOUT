@@ -126,8 +126,17 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <script>
-    let players = []; const tbody=document.getElementById('tbody'); let currentIndex=null;
+    // ===== Persistenza locale (memorizza import e aggiunte) =====
+    const STORAGE_KEY = 'fade_scout_players_v2';
+    function persist(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(players)); }catch(e){ console.warn('Persistenza fallita', e); } }
+    function load(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; }catch(e){ return []; } }
+
+    let players = load();
+    const tbody=document.getElementById('tbody');
+    let currentIndex=null;
+
     function normalizeCategory(cat){ if(!cat) return ''; const first=(String(cat).trim().split(/\s+/)[0]||'').toUpperCase(); if(first.startsWith('ECC')) return 'ECC'; if(first.startsWith('PRO')) return 'PRO'; if(first.startsWith('PRIMA')) return 'PRIMA'; if(first.startsWith('SECONDA')) return 'SECONDA'; if(first.startsWith('TERZA')) return 'TERZA'; if(first.startsWith('JUN')) return 'JUNIORES'; if(first.startsWith('ALL')) return 'ALLIEVI'; if(first==='SERIE') return 'SERIE D'; return first; }
+
     function render(){ tbody.innerHTML=''; players.forEach((p,i)=>{ const tr=document.createElement('tr'); const photo=p.photo||'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"><rect width=\"100%\" height=\"100%\" fill=\"#e8f5e9\"/></svg>'); tr.innerHTML=`
           <td><img src="${photo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #c8e6c9"/></td>
           <td><strong>${p.lastName||''}</strong></td>
@@ -140,11 +149,15 @@
           <td>${p.year||''}</td>
           <td>${p.notes||''}</td>
           <td><button class="fab secondary" onclick="editPlayer(${i})">Apri</button></td>`; tbody.appendChild(tr); }); }
+
     function openModal(p=null){ const modal=document.getElementById('modal'); modal.classList.add('open'); if(p){ document.getElementById('p-firstname').value=p.firstName||''; document.getElementById('p-lastname').value=p.lastName||''; document.getElementById('p-role').value=p.role||'Centrocampista'; document.getElementById('p-category').value=p.category||''; document.getElementById('p-module').value=p.module||''; document.getElementById('p-team').value=p.team||''; document.getElementById('p-foot').value=p.foot||''; document.getElementById('p-year').value=p.year||''; document.getElementById('p-notes').value=p.notes||''; document.getElementById('p-photo').src=p.photo||''; currentIndex=players.indexOf(p);} else { modal.querySelectorAll('input, select, textarea').forEach(e=>e.value=''); document.getElementById('p-photo').src=''; currentIndex=null; } }
     function closeModal(){ document.getElementById('modal').classList.remove('open'); }
-    function savePlayer(){ const p={ firstName:document.getElementById('p-firstname').value.trim(), lastName:document.getElementById('p-lastname').value.trim(), role:document.getElementById('p-role').value, category:normalizeCategory(document.getElementById('p-category').value), module:document.getElementById('p-module').value.trim(), team:document.getElementById('p-team').value.trim(), foot:document.getElementById('p-foot').value, year:document.getElementById('p-year').value, notes:document.getElementById('p-notes').value, photo:document.getElementById('p-photo').src || '' }; if(p.module) addModuleOption(p.module); if(currentIndex!=null){ players[currentIndex]=p; } else { players.push(p); } closeModal(); render(); }
+
+    function savePlayer(){ const p={ firstName:document.getElementById('p-firstname').value.trim(), lastName:document.getElementById('p-lastname').value.trim(), role:document.getElementById('p-role').value, category:normalizeCategory(document.getElementById('p-category').value), module:document.getElementById('p-module').value.trim(), team:document.getElementById('p-team').value.trim(), foot:document.getElementById('p-foot').value, year:document.getElementById('p-year').value, notes:document.getElementById('p-notes').value, photo:document.getElementById('p-photo').src || '' }; if(p.module) addModuleOption(p.module); if(currentIndex!=null){ players[currentIndex]=p; } else { players.push(p); } persist(); closeModal(); render(); }
     function editPlayer(i){ openModal(players[i]); }
+
     document.addEventListener('change', e=>{ if(e.target && e.target.id==='p-photo-file'){ const f=e.target.files[0]; if(!f) return; const fr=new FileReader(); fr.onload=()=>{ document.getElementById('p-photo').src=fr.result; }; fr.readAsDataURL(f); } });
+
     function applyFilters(){ const name=(document.getElementById('f-name').value||'').toLowerCase(); const team=(document.getElementById('f-team').value||'').toLowerCase(); const role=document.getElementById('f-role').value; const categorySel=document.getElementById('f-category').value; const categoryNorm=normalizeCategory(categorySel); const module=document.getElementById('f-module').value; const foot=document.getElementById('f-foot').value; const list=players.filter(p=> (!name || ((p.lastName||'').toLowerCase().includes(name) || (p.firstName||'').toLowerCase().includes(name))) && (!team || (p.team||'').toLowerCase().includes(team)) && (!role || p.role===role) && (!categoryNorm || normalizeCategory(p.category)===categoryNorm) && (!module || p.module===module) && (!foot || p.foot===foot) ); tbody.innerHTML=''; list.forEach((p)=>{ const tr=document.createElement('tr'); const photo=p.photo||'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"><rect width=\"100%\" height=\"100%\" fill=\"#e8f5e9\"/></svg>'); const idx=players.indexOf(p); tr.innerHTML=`
           <td><img src="${photo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #c8e6c9"/></td>
           <td><strong>${p.lastName||''}</strong></td>
@@ -157,11 +170,58 @@
           <td>${p.year||''}</td>
           <td>${p.notes||''}</td>
           <td><button class="fab secondary" onclick="editPlayer(${idx})">Apri</button></td>`; tbody.appendChild(tr); }); }
+
     function resetFilters(){ document.querySelectorAll('.controls input,.controls select').forEach(e=>e.value=''); render(); }
+
     function triggerExcel(){ document.getElementById('excel-file').click(); }
-    document.getElementById('excel-file').addEventListener('change', async e=>{ const file=e.target.files[0]; if(!file) return; try{ const data=await file.arrayBuffer(); const wb=XLSX.read(data,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(ws,{header:1}); if(!rows.length){ alert('Il file è vuoto.'); return; } const headers=rows[0].map(h=>String(h||'').trim()); const idx=(names)=>{ const norm=s=>s.toLowerCase().replace(/[^a-z0-9]/g,''); const set=new Set(names.map(norm)); for(let i=0;i<headers.length;i++){ if(set.has(norm(headers[i]))) return i; } return -1; }; const iNome=idx(['nome','first','firstname','giocatore']); const iCogn=idx(['cognome','last','lastname','surname']); const iRuolo=idx(['ruolo','role']); const iTeam=idx(['squadra','club','team']); const iAnno=idx(['anno','annodinascita','birthyear','a.n.','year','nascita']); const iCat=idx(['categoria','cat','league','campionato']); const iMod=idx(['modulo','sistema','formation','module']); const iPiede=idx(['piede','foot']); const iNote=idx(['note','osservazioni','commenti']); const iFoto=idx(['foto','immagine','image','photo','urlfoto']); const added=[]; for(let r=1;r<rows.length;r++){ const row=rows[r]||[]; let firstName=(iNome>=0? String(row[iNome]||'').trim():''), lastName=(iCogn>=0? String(row[iCogn]||'').trim():''); if(!lastName && firstName){ const parts=firstName.split(/\s+/); if(parts.length>1){ lastName=parts.pop(); firstName=parts.join(' '); } } const role=(iRuolo>=0? String(row[iRuolo]||'').trim():''), team=(iTeam>=0? String(row[iTeam]||'').trim():''); let year=(iAnno>=0? Number(String(row[iAnno]).replace(/[^0-9]/g,'')) : ''); let categoryRaw=(iCat>=0? String(row[iCat]||'').trim():''); const module=(iMod>=0? String(row[iMod]||'').trim():''), foot=(iPiede>=0? String(row[iPiede]||'').trim():''); const notes=(iNote>=0? String(row[iNote]||'').trim():''), photo=(iFoto>=0? String(row[iFoto]||'').trim():''); const category=normalizeCategory(categoryRaw); if(role) addRoleOption(role); if(module) addModuleOption(module); players.push({ firstName,lastName,role:role||'Centrocampista',category,module,team,foot,year,notes,photo }); added.push(1); } render(); alert(`Importati ${added.length} giocatori.`); }catch(err){ console.error(err); alert('Errore durante l\'importazione. Verifica il file.'); } finally{ e.target.value=''; } });
+    document.getElementById('excel-file').addEventListener('change', async e=>{
+      const file=e.target.files[0]; if(!file) return;
+      try{
+        const data=await file.arrayBuffer();
+        const wb=XLSX.read(data,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+        if(!rows.length){ alert('Il file è vuoto.'); return; }
+        const headers=rows[0].map(h=>String(h||'').trim());
+        const idx=(names)=>{ const norm=s=>s.toLowerCase().replace(/[^a-z0-9]/g,''); const set=new Set(names.map(norm)); for(let i=0;i<headers.length;i++){ if(set.has(norm(headers[i]))) return i; } return -1; };
+        const iNome=idx(['nome','first','firstname','giocatore']);
+        const iCogn=idx(['cognome','last','lastname','surname']);
+        const iRuolo=idx(['ruolo','role']);
+        const iTeam=idx(['squadra','club','team']);
+        const iAnno=idx(['anno','annodinascita','birthyear','a.n.','year','nascita']);
+        const iCat=idx(['categoria','cat','league','campionato']);
+        const iMod=idx(['modulo','sistema','formation','module']);
+        const iPiede=idx(['piede','foot']);
+        const iNote=idx(['note','osservazioni','commenti']);
+        const iFoto=idx(['foto','immagine','image','photo','urlfoto']);
+        const added=[];
+        for(let r=1;r<rows.length;r++){
+          const row=rows[r]||[];
+          let firstName=(iNome>=0? String(row[iNome]||'').trim():''), lastName=(iCogn>=0? String(row[iCogn]||'').trim():'');
+          if(!lastName && firstName){ const parts=firstName.split(/\s+/); if(parts.length>1){ lastName=parts.pop(); firstName=parts.join(' '); } }
+          const role=(iRuolo>=0? String(row[iRuolo]||'').trim():''), team=(iTeam>=0? String(row[iTeam]||'').trim():'');
+          let year=(iAnno>=0? Number(String(row[iAnno]).replace(/[^0-9]/g,'')) : '');
+          let categoryRaw=(iCat>=0? String(row[iCat]||'').trim():'');
+          const module=(iMod>=0? String(row[iMod]||'').trim():''), foot=(iPiede>=0? String(row[iPiede]||'').trim():'');
+          const notes=(iNote>=0? String(row[iNote]||'').trim():''), photo=(iFoto>=0? String(row[iFoto]||'').trim():'');
+          const category=normalizeCategory(categoryRaw);
+          if(role) addRoleOption(role);
+          if(module) addModuleOption(module);
+          players.push({ firstName,lastName,role:role||'Centrocampista',category,module,team,foot,year,notes,photo });
+          added.push(1);
+        }
+        persist();
+        render();
+        alert(`Importati ${added.length} giocatori.`);
+      }catch(err){ console.error(err); alert('Errore durante l\'importazione. Verifica il file.'); }
+      finally{ e.target.value=''; }
+    });
+
     function addRoleOption(role){ const ensure=(sel)=>{ const opts=[...sel.options].map(o=>o.value||o.textContent); if(!opts.includes(role)){ const o=document.createElement('option'); o.textContent=role; o.value=role; sel.appendChild(o); } }; ensure(document.getElementById('f-role')); ensure(document.getElementById('p-role')); }
     function addModuleOption(mod){ const f=document.getElementById('f-module'); const opts=[...f.options].map(o=>o.value||o.textContent); if(!opts.includes(mod)){ const o=document.createElement('option'); o.textContent=mod; o.value=mod; f.appendChild(o); } }
+
+    // Render iniziale dai dati memorizzati
+    render();
   </script>
 </body>
 </html>
